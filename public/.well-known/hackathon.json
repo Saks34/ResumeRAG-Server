@@ -1,0 +1,15 @@
+{
+  "name": "ResumeRAG",
+  "version": "0.1.0",
+  "description": "MERN ResumeRAG with Gemini embeddings, Cloudinary storage, recruiter-only PII, search, ask, and job matching.",
+  "author": "Your Name",
+  "endpoints": [
+    "/api/health",
+    "/api/_meta",
+    "/api/auth/register",
+    "/api/auth/login",
+    "/api/resumes",
+    "/api/jobs",
+    "/api/ask"
+  ]
+}
