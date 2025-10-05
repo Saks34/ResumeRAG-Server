@@ -19,6 +19,11 @@ async function createJob(req, res) {
   res.status(201).json({ id: String(insertedId) });
 }
 
+async function listJobs(req, res) {
+  const jobs = await Jobs().find({}).project({ title: 1, createdAt: 1 }).sort({ createdAt: -1 }).toArray();
+  res.json({ items: jobs.map(j => ({ id: String(j._id), title: j.title, createdAt: j.createdAt })) });
+}
+
 async function getJob(req, res) {
   let job;
   try {
@@ -97,4 +102,4 @@ async function matchJobGet(req, res) {
   return matchJob(req, res);
 }
 
-module.exports = { createJob, getJob, matchJob, matchJobGet };
+module.exports = { createJob, getJob, listJobs, matchJob, matchJobGet };

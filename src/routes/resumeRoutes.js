@@ -1,10 +1,12 @@
 const router = require('express').Router();
-const { authMiddlewareOptional } = require('../middleware/auth');
+const { authMiddlewareOptional, requireRecruiter, forbidRecruiter } = require('../middleware/auth');
 const { uploadMiddleware, createResumes, listResumes, getResume, downloadResume, analytics } = require('../controllers/resumeController');
 
-router.post('/', authMiddlewareOptional, uploadMiddleware(), createResumes);
+// Upload is NOT for recruiters (viewers can upload)
+router.post('/', authMiddlewareOptional, forbidRecruiter, uploadMiddleware(), createResumes);
 router.get('/', authMiddlewareOptional, listResumes);
-router.get('/analytics/basic', authMiddlewareOptional, analytics);
+// Analytics NOT for viewers -> recruiters only
+router.get('/analytics/basic', authMiddlewareOptional, requireRecruiter, analytics);
 router.get('/:id', authMiddlewareOptional, getResume);
 router.get('/:id/download', authMiddlewareOptional, downloadResume);
 

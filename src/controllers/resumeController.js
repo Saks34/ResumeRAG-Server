@@ -1,6 +1,6 @@
 const multer = require('multer');
 const AdmZip = require('adm-zip');
-const { Resumes, IdempotencyKeys, ObjectId } = require('../config/db');
+const { Resumes, IdempotencyKeys, Users, ObjectId } = require('../config/db');
 const { parseBufferToText, extractSkills, redactPII, extractPII } = require('../utils/parser');
 const { embedText } = require('../utils/embeddings');
 const { uploadBuffer } = require('../utils/cloudinary');
@@ -37,6 +37,13 @@ async function finalizeIdempotency(entry, result, failed = false) {
 
 async function createResumes(req, res) {
   const userId = req.user?.id;
+  let uploaderName = null;
+  if (userId) {
+    try {
+      const u = await Users().findOne({ _id: new ObjectId(userId) }, { projection: { name: 1 } });
+      uploaderName = u?.name || null;
+    } catch (e) {}
+  }
   const idem = await handleIdempotency(req, userId);
   if (idem.status === 'completed') return res.json(idem.result);
 
@@ -67,6 +74,7 @@ async function createResumes(req, res) {
         const doc = {
           owner: userId ? new ObjectId(userId) : null,
           filename: e.entryName,
+          displayName: (pii && pii.name) ? pii.name : (uploaderName || e.entryName),
           contentType: 'text/plain',
           text,
           skills,
@@ -99,6 +107,7 @@ async function createResumes(req, res) {
       const doc = {
         owner: userId ? new ObjectId(userId) : null,
         filename: file.originalname,
+        displayName: (pii && pii.name) ? pii.name : (uploaderName || file.originalname),
         contentType: file.mimetype,
         text,
         skills,
@@ -142,6 +151,7 @@ async function listResumes(req, res) {
   const mapped = items.map((r) => ({
     id: String(r._id),
     filename: r.filename,
+    title: r.displayName || r.filename,
     skills: r.skills,
     size: r.size,
     createdAt: r.createdAt,
@@ -162,12 +172,17 @@ async function getResume(req, res) {
   return res.json({
     id: String(r._id),
     filename: r.filename,
+    title: r.displayName || r.filename,
     skills: r.skills,
     size: r.size,
     createdAt: r.createdAt,
     text: isRecruiter ? r.text : (r.text ? redactPII(r.text) : ''),
     // Only recruiters can view extracted PII
     pii: isRecruiter ? (r.pii || null) : null,
+    cloudinaryUrl: isRecruiter ? (r.cloudinaryUrl || null) : null,
+    // Optional structured fields when available
+    education: Array.isArray(r.education) ? r.education : [],
+    projects: Array.isArray(r.projects) ? r.projects : [],
   });
 }
 
@@ -180,20 +195,28 @@ async function downloadResume(req, res) {
   }
   if (!r) return res.status(404).json({ error: { message: 'not found' } });
 
-  const filename = r.filename || 'resume.txt';
+  // Only recruiters can download original files
+  if (req.user?.role !== 'recruiter') {
+    return res.status(403).json({ error: { code: 'FORBIDDEN' } });
+  }
+
+  const filename = (r.displayName || r.filename || 'resume').replace(/[/\\\0\n\r\t\f\v]/g, '_');
+  const attachmentName = filename.endsWith('.pdf') || filename.endsWith('.docx') || filename.endsWith('.doc') || filename.endsWith('.txt')
+    ? filename
+    : `${filename}.txt`;
   // If Cloudinary available, redirect to it
   if (r.cloudinaryUrl) {
     return res.redirect(302, r.cloudinaryUrl);
   }
   if (r.original && r.original.length !== 0) {
     res.set('Content-Type', r.originalContentType || 'application/octet-stream');
-    res.set('Content-Disposition', `attachment; filename="${filename}"`);
+    res.set('Content-Disposition', `attachment; filename="${attachmentName.replace(/"/g, '')}"`);
     return res.send(r.original);
   }
   // Fallback to text export
   const text = r.text || '';
   res.set('Content-Type', 'text/plain; charset=utf-8');
-  res.set('Content-Disposition', `attachment; filename="${(filename || 'resume').replace(/"/g, '')}.txt"`);
+  res.set('Content-Disposition', `attachment; filename="${attachmentName.replace(/"/g, '')}"`);
   return res.send(text);
 }
 

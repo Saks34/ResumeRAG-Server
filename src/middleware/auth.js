@@ -27,3 +27,18 @@ function authMiddlewareOptional(req, res, next) {
 }
 
 module.exports = { authMiddleware, authMiddlewareOptional, JWT_SECRET };
+// Role guards
+function requireRecruiter(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: { code: 'UNAUTHORIZED' } });
+  if (req.user.role !== 'recruiter') return res.status(403).json({ error: { code: 'FORBIDDEN' } });
+  next();
+}
+
+function forbidRecruiter(req, res, next) {
+  // If a logged-in recruiter tries to access, block; otherwise allow (including anonymous or viewer)
+  if (req.user && req.user.role === 'recruiter') return res.status(403).json({ error: { code: 'FORBIDDEN' } });
+  next();
+}
+
+module.exports.requireRecruiter = requireRecruiter;
+module.exports.forbidRecruiter = forbidRecruiter;
