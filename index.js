@@ -11,14 +11,26 @@ const { errorHandler, notFound } = require('./src/middleware/error');
 connectDB();
 
 const app = express();
-const CLIENT_URL = process.env.CLIENT_URL;
-app.use(
-  cors(
-    CLIENT_URL
-      ? { origin: CLIENT_URL, credentials: true }
-      : {}
-  )
-);
+// Allow multiple origins via CLIENT_URLS (comma-separated) or single CLIENT_URL
+const rawOrigins = process.env.CLIENT_URLS || process.env.CLIENT_URL || '';
+const ALLOWED_ORIGINS = rawOrigins
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+const corsOptions = ALLOWED_ORIGINS.length
+  ? {
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true); // allow curl/postman
+        const clean = String(origin).replace(/\/$/, '');
+        if (ALLOWED_ORIGINS.includes(clean)) return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
+      },
+      credentials: true,
+    }
+  : {};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
